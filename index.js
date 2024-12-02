@@ -1,12 +1,23 @@
 const fs = require("fs");
 const path = require("path");
 const sgMail = require("@sendgrid/mail");
+const AWS = require("aws-sdk");
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const secretsManager = new AWS.SecretsManager();
+
 
 exports.handler = async (event, context) => {
   console.log("Handler invoked with event:", JSON.stringify(event, null, 2));
   try {
+    console.log("Fetching SendGrid API key from Secrets Manager...");
+    const secretId = process.env.SENDGRID_SECRET_ID; // Add secret ID to Lambda's environment variables
+    const secretResponse = await secretsManager
+      .getSecretValue({ SecretId: secretId })
+      .promise();
+
+    const sendGridApiKey = secretResponse.SecretString; // Use SecretString directly for plain string secrets
+    console.log("Successfully retrieved SendGrid API key");
+    sgMail.setApiKey(sendGridApiKey);
     console.log("Reading email template...");
     const template = fs.readFileSync(
       path.resolve(__dirname, "template.html"),
@@ -24,7 +35,7 @@ exports.handler = async (event, context) => {
     console.log("Base URL:", baseUrl);
     console.log("From Email:", fromEmail);
 
-    const url = `http://${baseUrl}/verify?email=${email}&token=${token}`;
+    const url = `https://${baseUrl}/verify?email=${email}&token=${token}`;
     console.log("Generated verification link:", url);
 
     const mailBody = template.replace(/{{verificationLink}}/g, url);
